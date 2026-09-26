@@ -1,0 +1,2 @@
+# Who may call whom, with what retries and timeouts.
+# TODO: coordinator: { endpoints: [...], retries: 2, timeout: 1s }
