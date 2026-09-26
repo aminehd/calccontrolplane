@@ -1,4 +1,5 @@
 adder:
+  op: add
   cluster: adder
   address: adder
   port: 8080
@@ -7,6 +8,7 @@ adder:
   retries: 2
 
 multiplier:
+  op: mul
   cluster: multiplier
   address: multiplier
   port: 8080

@@ -71,6 +71,7 @@ def build(path: Path):
         "version": "1",
         "clusters": [cluster(n, s) for n, s in services.items()],
         "routes": routes,
+        "ops": {s["op"]: s.get("route", f"/{n}") for n, s in services.items() if "op" in s},
     }
 
 
@@ -121,6 +122,14 @@ def envoy_sidecar(path: Path, listen_port=9001, admin_port=9901):
             "clusters": snapshot["clusters"],
         },
     }
+
+
+def envoy_gateway(path: Path, listen_port=8080, admin_port=9901):
+    conf = envoy_sidecar(path, listen_port=listen_port, admin_port=admin_port)
+    listener = conf["static_resources"]["listeners"][0]
+    listener["name"] = "gateway"
+    listener["address"]["socket_address"]["address"] = "0.0.0.0"
+    return conf
 
 
 if __name__ == "__main__":

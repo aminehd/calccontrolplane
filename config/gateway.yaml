@@ -1,0 +1,173 @@
+{
+  "admin": {
+    "address": {
+      "socket_address": {
+        "address": "0.0.0.0",
+        "port_value": 9901
+      }
+    }
+  },
+  "static_resources": {
+    "listeners": [
+      {
+        "name": "gateway",
+        "address": {
+          "socket_address": {
+            "address": "0.0.0.0",
+            "port_value": 8080
+          }
+        },
+        "filter_chains": [
+          {
+            "filters": [
+              {
+                "name": "envoy.filters.network.http_connection_manager",
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "stat_prefix": "egress",
+                  "route_config": {
+                    "name": "local",
+                    "virtual_hosts": [
+                      {
+                        "name": "calculators",
+                        "domains": [
+                          "*"
+                        ],
+                        "routes": [
+                          {
+                            "match": {
+                              "prefix": "/add"
+                            },
+                            "route": {
+                              "cluster": "adder",
+                              "timeout": "5s",
+                              "retry_policy": {
+                                "retry_on": "5xx,reset,connect-failure",
+                                "num_retries": 2
+                              }
+                            }
+                          },
+                          {
+                            "match": {
+                              "prefix": "/mul"
+                            },
+                            "route": {
+                              "cluster": "multiplier",
+                              "timeout": "5s",
+                              "retry_policy": {
+                                "retry_on": "5xx,reset,connect-failure",
+                                "num_retries": 2
+                              }
+                            }
+                          },
+                          {
+                            "match": {
+                              "prefix": "/"
+                            },
+                            "route": {
+                              "cluster": "coordinator",
+                              "timeout": "5s",
+                              "retry_policy": {
+                                "retry_on": "5xx,reset,connect-failure",
+                                "num_retries": 2
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "http_filters": [
+                    {
+                      "name": "envoy.filters.http.router",
+                      "typed_config": {
+                        "@type": "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "clusters": [
+      {
+        "name": "adder",
+        "type": "STRICT_DNS",
+        "lb_policy": "ROUND_ROBIN",
+        "connect_timeout": "1s",
+        "load_assignment": {
+          "cluster_name": "adder",
+          "endpoints": [
+            {
+              "lb_endpoints": [
+                {
+                  "endpoint": {
+                    "address": {
+                      "socket_address": {
+                        "address": "adder",
+                        "port_value": 8080
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "multiplier",
+        "type": "STRICT_DNS",
+        "lb_policy": "ROUND_ROBIN",
+        "connect_timeout": "1s",
+        "load_assignment": {
+          "cluster_name": "multiplier",
+          "endpoints": [
+            {
+              "lb_endpoints": [
+                {
+                  "endpoint": {
+                    "address": {
+                      "socket_address": {
+                        "address": "multiplier",
+                        "port_value": 8080
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "coordinator",
+        "type": "STRICT_DNS",
+        "lb_policy": "ROUND_ROBIN",
+        "connect_timeout": "1s",
+        "load_assignment": {
+          "cluster_name": "coordinator",
+          "endpoints": [
+            {
+              "lb_endpoints": [
+                {
+                  "endpoint": {
+                    "address": {
+                      "socket_address": {
+                        "address": "coordinator",
+                        "port_value": 8080
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
