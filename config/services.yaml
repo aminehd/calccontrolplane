@@ -1,2 +1,6 @@
-# Who may call whom, with what retries and timeouts.
-# TODO: coordinator: { endpoints: [...], retries: 2, timeout: 1s }
+coordinator:
+  cluster: coordinator
+  address: coordinator
+  port: 8080
+  timeout: 5s
+  retries: 2
