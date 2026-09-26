@@ -1,6 +1,23 @@
+adder:
+  cluster: adder
+  address: adder
+  port: 8080
+  route: /add
+  timeout: 5s
+  retries: 2
+
+multiplier:
+  cluster: multiplier
+  address: multiplier
+  port: 8080
+  route: /mul
+  timeout: 5s
+  retries: 2
+
 coordinator:
   cluster: coordinator
   address: coordinator
   port: 8080
+  route: /
   timeout: 5s
   retries: 2
