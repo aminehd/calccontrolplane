@@ -158,7 +158,7 @@
                     "address": {
                       "socket_address": {
                         "address": "coordinator",
-                        "port_value": 8080
+                        "port_value": 8081
                       }
                     }
                   }

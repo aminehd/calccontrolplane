@@ -19,7 +19,7 @@ multiplier:
 coordinator:
   cluster: coordinator
   address: coordinator
-  port: 8080
+  port: 8081
   route: /
   timeout: 5s
   retries: 2
