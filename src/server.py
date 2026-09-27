@@ -1,3 +1,8 @@
+"""Serve the compiled config over HTTP.
+
+Four read only endpoints and no state. The syncer polls /lds and /cds; /snapshot
+is for humans.
+"""
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -33,6 +38,18 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+
+# --------------------------------------------------------------------------
+# The endpoint table
+#
+# Each view is called with CONFIG, so services.yaml is re-read on every single
+# request. That looks wasteful and is the point: the file is a mounted
+# ConfigMap, so the next request after Kubernetes swaps it already reflects the
+# change. Cache it and live updates stop working.
+#
+# An unknown path replies with the list of real ones, which beats a bare 404
+# when you are poking at it by hand.
+# --------------------------------------------------------------------------
 
 VIEWS = {
     "/health": lambda config: {"ok": True},
