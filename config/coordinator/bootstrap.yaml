@@ -1,0 +1,24 @@
+{
+  "node": {
+    "id": "coordinator",
+    "cluster": "calcmesh"
+  },
+  "admin": {
+    "address": {
+      "socket_address": {
+        "address": "0.0.0.0",
+        "port_value": 9901
+      }
+    }
+  },
+  "dynamic_resources": {
+    "lds_config": {
+      "path": "/etc/envoy/xds/lds.yaml",
+      "resource_api_version": "V3"
+    },
+    "cds_config": {
+      "path": "/etc/envoy/xds/cds.yaml",
+      "resource_api_version": "V3"
+    }
+  }
+}

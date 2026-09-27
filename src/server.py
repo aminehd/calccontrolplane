@@ -25,7 +25,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/snapshot":
             self._send(snapshot.build(CONFIG))
             return
-        self._send({"paths": ["/health", "/snapshot"]})
+        if self.path == "/lds":
+            self._send(snapshot.lds(CONFIG))
+            return
+        if self.path == "/cds":
+            self._send(snapshot.cds(CONFIG))
+            return
+        self._send({"paths": ["/health", "/snapshot", "/lds", "/cds"]})
 
     def log_message(self, *args):
         pass

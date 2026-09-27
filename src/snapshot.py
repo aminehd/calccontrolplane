@@ -1,5 +1,11 @@
+import hashlib
 import json
 from pathlib import Path
+
+LISTENER_TYPE = "type.googleapis.com/envoy.config.listener.v3.Listener"
+CLUSTER_TYPE = "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+EXTPROC_CLUSTER = "extproc"
+ROUTE_HEADER = "x-op"
 
 
 def parse(path: Path):
@@ -16,6 +22,10 @@ def parse(path: Path):
             key, _, value = line.strip().partition(":")
             services[current][key.strip()] = value.strip()
     return services
+
+
+def version_of(path: Path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:8]
 
 
 def cluster(name, spec):
@@ -46,9 +56,59 @@ def cluster(name, spec):
     }
 
 
-def route(name, spec):
+def extproc_cluster(address="extproc", port=18001):
     return {
-        "match": {"prefix": spec.get("route", f"/{name}")},
+        "name": EXTPROC_CLUSTER,
+        "type": "STRICT_DNS",
+        "connect_timeout": "1s",
+        "typed_extension_protocol_options": {
+            "envoy.extensions.upstreams.http.v3.HttpProtocolOptions": {
+                "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+                "explicit_http_config": {"http2_protocol_options": {}},
+            }
+        },
+        "load_assignment": {
+            "cluster_name": EXTPROC_CLUSTER,
+            "endpoints": [
+                {
+                    "lb_endpoints": [
+                        {
+                            "endpoint": {
+                                "address": {
+                                    "socket_address": {"address": address, "port_value": port}
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
+        },
+    }
+
+
+def ext_proc_filter():
+    return {
+        "name": "envoy.filters.http.ext_proc",
+        "typed_config": {
+            "@type": "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor",
+            "grpc_service": {"envoy_grpc": {"cluster_name": EXTPROC_CLUSTER}},
+            "processing_mode": {
+                "request_header_mode": "SEND",
+                "request_body_mode": "BUFFERED",
+                "response_header_mode": "SKIP",
+                "response_body_mode": "NONE",
+            },
+            "message_timeout": "2s",
+        },
+    }
+
+
+def op_route(name, spec):
+    return {
+        "match": {
+            "prefix": "/",
+            "headers": [{"name": ROUTE_HEADER, "string_match": {"exact": spec["op"]}}],
+        },
         "route": {
             "cluster": spec.get("cluster", name),
             "timeout": spec.get("timeout", "5s"),
@@ -62,74 +122,79 @@ def route(name, spec):
 
 def build(path: Path):
     services = parse(path)
-    routes = sorted(
-        (route(n, s) for n, s in services.items()),
-        key=lambda r: len(r["match"]["prefix"]),
-        reverse=True,
-    )
     return {
-        "version": "1",
-        "clusters": [cluster(n, s) for n, s in services.items()],
-        "routes": routes,
-        "ops": {s["op"]: s.get("route", f"/{n}") for n, s in services.items() if "op" in s},
+        "version": version_of(path),
+        "clusters": [cluster(n, s) for n, s in services.items()] + [extproc_cluster()],
+        "routes": [op_route(n, s) for n, s in services.items() if "op" in s],
+        "ops": {s["op"]: n for n, s in services.items() if "op" in s},
     }
 
 
-def envoy_sidecar(path: Path, listen_port=9001, admin_port=9901):
+def listener(path: Path, listen_port=9001):
     snapshot = build(path)
     return {
-        "admin": {"address": {"socket_address": {"address": "0.0.0.0", "port_value": admin_port}}},
-        "static_resources": {
-            "listeners": [
-                {
-                    "name": "egress",
-                    "address": {
-                        "socket_address": {"address": "127.0.0.1", "port_value": listen_port}
-                    },
-                    "filter_chains": [
-                        {
-                            "filters": [
+        "name": "egress",
+        "address": {"socket_address": {"address": "127.0.0.1", "port_value": listen_port}},
+        "filter_chains": [
+            {
+                "filters": [
+                    {
+                        "name": "envoy.filters.network.http_connection_manager",
+                        "typed_config": {
+                            "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                            "stat_prefix": "egress",
+                            "route_config": {
+                                "name": "local",
+                                "virtual_hosts": [
+                                    {
+                                        "name": "calculators",
+                                        "domains": ["*"],
+                                        "routes": snapshot["routes"],
+                                    }
+                                ],
+                            },
+                            "http_filters": [
+                                ext_proc_filter(),
                                 {
-                                    "name": "envoy.filters.network.http_connection_manager",
+                                    "name": "envoy.filters.http.router",
                                     "typed_config": {
-                                        "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                                        "stat_prefix": "egress",
-                                        "route_config": {
-                                            "name": "local",
-                                            "virtual_hosts": [
-                                                {
-                                                    "name": "calculators",
-                                                    "domains": ["*"],
-                                                    "routes": snapshot["routes"],
-                                                }
-                                            ],
-                                        },
-                                        "http_filters": [
-                                            {
-                                                "name": "envoy.filters.http.router",
-                                                "typed_config": {
-                                                    "@type": "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router"
-                                                },
-                                            }
-                                        ],
+                                        "@type": "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router"
                                     },
-                                }
-                            ]
-                        }
-                    ],
-                }
-            ],
-            "clusters": snapshot["clusters"],
+                                },
+                            ],
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+
+
+def bootstrap(node_id, admin_port=9901, xds_dir="/etc/envoy/xds"):
+    return {
+        "node": {"id": node_id, "cluster": "calcmesh"},
+        "admin": {
+            "address": {"socket_address": {"address": "0.0.0.0", "port_value": admin_port}}
+        },
+        "dynamic_resources": {
+            "lds_config": {"path": f"{xds_dir}/lds.yaml", "resource_api_version": "V3"},
+            "cds_config": {"path": f"{xds_dir}/cds.yaml", "resource_api_version": "V3"},
         },
     }
 
 
-def envoy_gateway(path: Path, listen_port=8080, admin_port=9901):
-    conf = envoy_sidecar(path, listen_port=listen_port, admin_port=admin_port)
-    listener = conf["static_resources"]["listeners"][0]
-    listener["name"] = "gateway"
-    listener["address"]["socket_address"]["address"] = "0.0.0.0"
-    return conf
+def lds(path: Path, listen_port=9001):
+    return {
+        "version_info": version_of(path),
+        "resources": [dict(listener(path, listen_port), **{"@type": LISTENER_TYPE})],
+    }
+
+
+def cds(path: Path):
+    return {
+        "version_info": version_of(path),
+        "resources": [dict(c, **{"@type": CLUSTER_TYPE}) for c in build(path)["clusters"]],
+    }
 
 
 if __name__ == "__main__":

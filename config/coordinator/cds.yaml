@@ -1,0 +1,90 @@
+{
+  "version_info": "5d303985",
+  "resources": [
+    {
+      "name": "adder",
+      "type": "STRICT_DNS",
+      "lb_policy": "ROUND_ROBIN",
+      "connect_timeout": "1s",
+      "load_assignment": {
+        "cluster_name": "adder",
+        "endpoints": [
+          {
+            "lb_endpoints": [
+              {
+                "endpoint": {
+                  "address": {
+                    "socket_address": {
+                      "address": "adder",
+                      "port_value": 8080
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "@type": "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+    },
+    {
+      "name": "multiplier",
+      "type": "STRICT_DNS",
+      "lb_policy": "ROUND_ROBIN",
+      "connect_timeout": "1s",
+      "load_assignment": {
+        "cluster_name": "multiplier",
+        "endpoints": [
+          {
+            "lb_endpoints": [
+              {
+                "endpoint": {
+                  "address": {
+                    "socket_address": {
+                      "address": "multiplier",
+                      "port_value": 8080
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "@type": "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+    },
+    {
+      "name": "extproc",
+      "type": "STRICT_DNS",
+      "connect_timeout": "1s",
+      "typed_extension_protocol_options": {
+        "envoy.extensions.upstreams.http.v3.HttpProtocolOptions": {
+          "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+          "explicit_http_config": {
+            "http2_protocol_options": {}
+          }
+        }
+      },
+      "load_assignment": {
+        "cluster_name": "extproc",
+        "endpoints": [
+          {
+            "lb_endpoints": [
+              {
+                "endpoint": {
+                  "address": {
+                    "socket_address": {
+                      "address": "extproc",
+                      "port_value": 18001
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "@type": "type.googleapis.com/envoy.config.cluster.v3.Cluster"
+    }
+  ]
+}
