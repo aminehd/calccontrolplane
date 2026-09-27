@@ -1,13 +1,4 @@
-"""Copy the served config onto disk where Envoy watches.
-
-This process exists because of one Kubernetes detail. Envoy watches its xDS path
-with inotify, but a ConfigMap update is a swap of the ..data symlink, and that
-does not fire the event Envoy waits for. Mounting lds.yaml from a ConfigMap
-means the file changes and Envoy never reloads.
-
-So the coordinator pod gets an emptyDir instead, and this sidecar writes real
-files into it.
-"""
+"""Copy the served config into the emptyDir Envoy watches."""
 import json
 import os
 import time
@@ -42,13 +33,7 @@ def sync_once():
 
 
 # --------------------------------------------------------------------------
-# Writing safely
-#
-# Write to a temp name, then rename. Rename is atomic, so Envoy reads either the
-# whole old file or the whole new one, never a half written one it would reject.
-#
-# Returning False on identical bytes is what keeps the log quiet: without it
-# this would announce a write every five seconds forever.
+# Atomic write
 # --------------------------------------------------------------------------
 
 def write_if_changed(target, resource):

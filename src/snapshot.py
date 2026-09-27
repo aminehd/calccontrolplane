@@ -1,11 +1,4 @@
-"""Compile services.yaml into Envoy config.
-
-Pure functions: text in, dicts out. Nothing here opens a socket or holds state,
-which is why every part of it is testable without a cluster.
-
-Read top down. The file opens with the three documents Envoy consumes and ends
-at the two leaves that read bytes off disk.
-"""
+"""Compile services.yaml into Envoy config."""
 import hashlib
 import json
 from pathlib import Path
@@ -21,17 +14,7 @@ ROUTE_HEADER = "x-op"
 
 
 # --------------------------------------------------------------------------
-# What Envoy consumes
-#
-# Three documents, and Envoy treats them very differently.
-#
-# bootstrap is static: Envoy reads it once at startup from a file, and it only
-# says who this proxy is and where to look for the rest. It can never change
-# without a restart.
-#
-# lds and cds are dynamic: the listener (ports, filters, routes) and the
-# clusters (upstreams). Both carry version_info, a hash of services.yaml, which
-# is how Envoy decides whether what it just read is new.
+# Documents Envoy consumes
 # --------------------------------------------------------------------------
 
 def lds(path: Path, listen_port=9001):
@@ -60,14 +43,7 @@ def bootstrap(node_id, admin_port=9901, xds_dir="/etc/envoy/xds"):
 
 
 # --------------------------------------------------------------------------
-# The one read of services.yaml
-#
-# Everything above calls this. It is the only place the file is turned into
-# clusters and routes, so lds and cds can never disagree about the topology.
-#
-# A service gets a route only if it declares an op. That is the whole rule for
-# what is reachable: no op, no route, and the coordinator is the example. It
-# sits in the mesh without being routable.
+# services.yaml -> clusters and routes
 # --------------------------------------------------------------------------
 
 def build(path: Path):
@@ -110,17 +86,7 @@ def http_connection_manager(routes):
 
 
 # --------------------------------------------------------------------------
-# The builders
-#
-# One dict each, and this is where the op becomes a routing decision.
-#
-# op_route matches on a header, never on the path, because the path is always
-# /calc. ext_proc puts the op in that header after reading the body, so the
-# route table is the second half of a handshake with extproc.py: this file
-# decides what x-op values mean, that file decides what x-op says.
-#
-# Order matters in a real route list, first match wins, but these are mutually
-# exclusive exact matches so any order behaves the same.
+# Route and cluster builders
 # --------------------------------------------------------------------------
 
 def op_route(name, spec):
@@ -189,15 +155,7 @@ def extproc_cluster(address="extproc", port=18001):
 
 
 # --------------------------------------------------------------------------
-# Shapes Envoy repeats
-#
-# Envoy nests an address four levels deep and asks for it everywhere. These two
-# exist so that nesting is written once.
-#
-# STRICT_DNS in cluster() is doing real work: Envoy re-resolves the name in the
-# background, so when Kubernetes replaces a pod the traffic follows without any
-# config change. A real mesh would push pod IPs over EDS instead; letting
-# kube-dns do it is the honest shortcut for one laptop.
+# Repeated Envoy shapes
 # --------------------------------------------------------------------------
 
 def endpoints(cluster_name, address, port):
@@ -212,14 +170,7 @@ def socket(address, port):
 
 
 # --------------------------------------------------------------------------
-# The leaves
-#
-# A deliberately tiny yaml reader: top level keys, two space indented pairs,
-# everything a string. No dependency, and it fails loudly on anything fancier.
-#
-# version_of hashes the file rather than the parsed result, so reformatting the
-# yaml counts as a change. That is the conservative direction: a spurious reload
-# is cheap, a missed one leaves Envoy serving stale routes.
+# Parsing and versioning
 # --------------------------------------------------------------------------
 
 def parse(path: Path):

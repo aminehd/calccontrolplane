@@ -32,7 +32,6 @@ Two sidecars ship from this repo:
   which calculator serves the request.
 
 Every file in `src/` reads top down: the entry point first, then what it calls,
-down to the leaves. `snapshot.py` starts at `lds`/`cds`/`bootstrap` and ends at
-`parse`, so the first thing you read is what the server serves.
+down to the leaves.
 
 `make test` runs the tests.
