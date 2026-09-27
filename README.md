@@ -3,8 +3,8 @@
 The control plane for the mesh.
 
 `config/services.yaml` is the source of truth: it declares each calculator, its
-address and the `op` that reaches it. `src/snapshot.py` compiles that into Envoy
-clusters and routes, and `src/server.py` serves them at `/snapshot`, `/lds` and
+address and the `op` that reaches it. `src/xds.py` compiles that into Envoy
+clusters and routes, and `src/server.py` serves them at `/topology`, `/lds` and
 `/cds`.
 
 ```

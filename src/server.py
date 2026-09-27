@@ -4,7 +4,7 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import snapshot
+import xds
 
 PORT = int(os.environ.get("PORT", "18000"))
 CONFIG = Path(os.environ.get("SERVICES_FILE", "config/services.yaml"))
@@ -41,9 +41,9 @@ class Handler(BaseHTTPRequestHandler):
 
 VIEWS = {
     "/health": lambda config: {"ok": True},
-    "/snapshot": snapshot.build,
-    "/lds": snapshot.lds,
-    "/cds": snapshot.cds,
+    "/topology": xds.topology,
+    "/lds": xds.lds,
+    "/cds": xds.cds,
 }
 
 

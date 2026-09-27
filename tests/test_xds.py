@@ -6,7 +6,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import snapshot
+import xds
 
 SERVICES = ROOT / "config" / "services.yaml"
 
@@ -28,7 +28,7 @@ adder:
 
 
 def test_parse_reads_nested_keys(cfg):
-    services = snapshot.parse(cfg)
+    services = xds.parse(cfg)
     assert services == {
         "adder": {
             "op": "add",
@@ -42,8 +42,8 @@ def test_parse_reads_nested_keys(cfg):
 
 
 def test_cluster_points_at_the_service_address(cfg):
-    spec = snapshot.parse(cfg)["adder"]
-    c = snapshot.cluster("adder", spec)
+    spec = xds.parse(cfg)["adder"]
+    c = xds.cluster("adder", spec)
     sock = c["load_assignment"]["endpoints"][0]["lb_endpoints"][0]["endpoint"]["address"][
         "socket_address"
     ]
@@ -51,7 +51,7 @@ def test_cluster_points_at_the_service_address(cfg):
 
 
 def test_routes_match_on_the_header_not_the_path(cfg):
-    routes = snapshot.build(cfg)["routes"]
+    routes = xds.topology(cfg)["routes"]
     assert len(routes) == 1
     match = routes[0]["match"]
     assert match["prefix"] == "/"
@@ -63,7 +63,7 @@ def test_routes_match_on_the_header_not_the_path(cfg):
 
 
 def test_extproc_cluster_speaks_http2(cfg):
-    clusters = {c["name"]: c for c in snapshot.build(cfg)["clusters"]}
+    clusters = {c["name"]: c for c in xds.topology(cfg)["clusters"]}
     assert set(clusters) == {"adder", "extproc"}
     opts = clusters["extproc"]["typed_extension_protocol_options"][
         "envoy.extensions.upstreams.http.v3.HttpProtocolOptions"
@@ -71,14 +71,14 @@ def test_extproc_cluster_speaks_http2(cfg):
     assert "http2_protocol_options" in opts["explicit_http_config"]
 
 
-def test_listener_runs_ext_proc_before_the_router(cfg):
-    hcm = snapshot.listener(cfg)["filter_chains"][0]["filters"][0]["typed_config"]
+def test_egress_listener_runs_ext_proc_before_the_router(cfg):
+    hcm = xds.egress_listener(cfg)["filter_chains"][0]["filters"][0]["typed_config"]
     names = [f["name"] for f in hcm["http_filters"]]
     assert names == ["envoy.filters.http.ext_proc", "envoy.filters.http.router"]
 
 
 def test_bootstrap_reads_xds_from_disk():
-    boot = snapshot.bootstrap("coordinator")
+    boot = xds.bootstrap("coordinator")
     assert boot["node"]["id"] == "coordinator"
     assert boot["dynamic_resources"]["lds_config"]["path"] == "/etc/envoy/xds/lds.yaml"
     assert boot["dynamic_resources"]["cds_config"]["path"] == "/etc/envoy/xds/cds.yaml"
@@ -86,21 +86,21 @@ def test_bootstrap_reads_xds_from_disk():
 
 
 def test_version_changes_when_services_change(cfg):
-    before = snapshot.version_of(cfg)
+    before = xds.version_of(cfg)
     cfg.write_text(cfg.read_text().replace("3s", "9s"))
-    assert snapshot.version_of(cfg) != before
+    assert xds.version_of(cfg) != before
 
 
 def test_xds_resources_carry_their_type(cfg):
-    assert snapshot.lds(cfg)["resources"][0]["@type"].endswith("listener.v3.Listener")
-    assert all(r["@type"].endswith("cluster.v3.Cluster") for r in snapshot.cds(cfg)["resources"])
-    assert snapshot.lds(cfg)["version_info"] == snapshot.version_of(cfg)
+    assert xds.lds(cfg)["resources"][0]["@type"].endswith("listener.v3.Listener")
+    assert all(r["@type"].endswith("cluster.v3.Cluster") for r in xds.cds(cfg)["resources"])
+    assert xds.lds(cfg)["version_info"] == xds.version_of(cfg)
 
 
 def test_committed_config_is_in_sync_with_services_yaml():
     import json
 
-    live = snapshot.version_of(SERVICES)
+    live = xds.version_of(SERVICES)
     for name in ("lds", "cds"):
         on_disk = json.loads((ROOT / "config" / "coordinator" / f"{name}.yaml").read_text())
         assert on_disk["version_info"] == live, f"{name}.yaml is stale, run make xds"

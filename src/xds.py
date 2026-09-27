@@ -20,14 +20,14 @@ ROUTE_HEADER = "x-op"
 def lds(path: Path, listen_port=9001):
     return {
         "version_info": version_of(path),
-        "resources": [dict(listener(path, listen_port), **{"@type": LISTENER_TYPE})],
+        "resources": [dict(egress_listener(path, listen_port), **{"@type": LISTENER_TYPE})],
     }
 
 
 def cds(path: Path):
     return {
         "version_info": version_of(path),
-        "resources": [dict(c, **{"@type": CLUSTER_TYPE}) for c in build(path)["clusters"]],
+        "resources": [dict(c, **{"@type": CLUSTER_TYPE}) for c in topology(path)["clusters"]],
     }
 
 
@@ -43,10 +43,10 @@ def bootstrap(node_id, admin_port=9901, xds_dir="/etc/envoy/xds"):
 
 
 # --------------------------------------------------------------------------
-# services.yaml -> clusters and routes
+# services.yaml -> topology
 # --------------------------------------------------------------------------
 
-def build(path: Path):
+def topology(path: Path):
     services = parse(path)
     return {
         "version": version_of(path),
@@ -56,7 +56,7 @@ def build(path: Path):
     }
 
 
-def listener(path: Path, listen_port=9001):
+def egress_listener(path: Path, listen_port=9001):
     return {
         "name": "egress",
         "address": socket("127.0.0.1", listen_port),
@@ -65,7 +65,7 @@ def listener(path: Path, listen_port=9001):
                 "filters": [
                     {
                         "name": "envoy.filters.network.http_connection_manager",
-                        "typed_config": http_connection_manager(build(path)["routes"]),
+                        "typed_config": http_connection_manager(topology(path)["routes"]),
                     }
                 ]
             }
@@ -194,4 +194,4 @@ def version_of(path: Path):
 
 
 if __name__ == "__main__":
-    print(json.dumps(build(Path("config/services.yaml")), indent=2))
+    print(json.dumps(topology(Path("config/services.yaml")), indent=2))
