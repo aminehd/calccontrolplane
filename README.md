@@ -10,7 +10,7 @@ and `/cds`.
 `src/` is split by what a file is, not by topic:
 
 ```
-src/lib/   xds.py                         no sockets, no state, importable
+src/lib/   xds.py routing.py              no sockets, no state, importable
 src/cmd/   server.py syncer.py extproc.py the three programs this image runs
 ```
 
@@ -44,7 +44,9 @@ Two of those three sit next to Envoy:
   cannot do this: its `..data` symlink swap does not trip Envoy's inotify watch.
 - `src/cmd/extproc.py` is the ext_proc server. It buffers the request body, reads
   `op`, and sets the `x-op` header with `clear_route_cache`, so the body decides
-  which calculator serves the request.
+  which calculator serves the request. The decision itself is
+  `src/lib/routing.py`, which is plain python with no protobuf, so it can be read
+  and tested without a cluster.
 
 Every file reads top down: the entry point first, then what it calls, down to
 the leaves.
