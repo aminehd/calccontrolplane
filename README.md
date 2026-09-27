@@ -31,4 +31,8 @@ Two sidecars ship from this repo:
   `op`, and sets the `x-op` header with `clear_route_cache`, so the body decides
   which calculator serves the request.
 
+Every file in `src/` reads top down: the entry point first, then what it calls,
+down to the leaves. `snapshot.py` starts at `lds`/`cds`/`bootstrap` and ends at
+`parse`, so the first thing you read is what the server serves.
+
 `make test` runs the tests.

@@ -9,7 +9,19 @@ PORT = int(os.environ.get("PORT", "18000"))
 CONFIG = Path(os.environ.get("SERVICES_FILE", "config/services.yaml"))
 
 
+def serve():
+    print(f"control plane up on {PORT}, services from {CONFIG}", flush=True)
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+
+
 class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        view = VIEWS.get(self.path)
+        if view is None:
+            self._send({"paths": sorted(VIEWS)})
+        else:
+            self._send(view(CONFIG))
+
     def _send(self, obj, code=200):
         body = json.dumps(obj, indent=2).encode()
         self.send_response(code)
@@ -18,24 +30,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self):
-        if self.path == "/health":
-            self._send({"ok": True})
-            return
-        if self.path == "/snapshot":
-            self._send(snapshot.build(CONFIG))
-            return
-        if self.path == "/lds":
-            self._send(snapshot.lds(CONFIG))
-            return
-        if self.path == "/cds":
-            self._send(snapshot.cds(CONFIG))
-            return
-        self._send({"paths": ["/health", "/snapshot", "/lds", "/cds"]})
-
     def log_message(self, *args):
         pass
 
 
-print(f"control plane up on {PORT}, services from {CONFIG}", flush=True)
-ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+VIEWS = {
+    "/health": lambda config: {"ok": True},
+    "/snapshot": snapshot.build,
+    "/lds": snapshot.lds,
+    "/cds": snapshot.cds,
+}
+
+
+if __name__ == "__main__":
+    serve()
