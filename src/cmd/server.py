@@ -4,7 +4,7 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import xds
+from lib import xds
 
 PORT = int(os.environ.get("PORT", "18000"))
 CONFIG = Path(os.environ.get("SERVICES_FILE", "config/services.yaml"))
