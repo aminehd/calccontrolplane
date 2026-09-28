@@ -1,54 +1,40 @@
-# calccontrolplane
+# calcnetworking
 
-The control plane for the mesh.
-
-`config/services.yaml` is the source of truth: it declares each calculator, its
-address and the `op` that reaches it. `src/lib/xds.py` compiles that into Envoy
-clusters and routes, and `src/cmd/server.py` serves them at `/topology`, `/lds`
-and `/cds`.
-
-`src/` is split by what a file is, not by topic:
+The networking for the mesh: the Envoy control plane, the data plane external
+processor, and the one contract they share.
 
 ```
-src/lib/   xds.py routing.py              no sockets, no state, importable
-src/cmd/   server.py syncer.py extproc.py the three programs this image runs
+src/
+  networkingcommons/
+    route_header.py        RouteHeader, OpRouteHeader    the header routes match on
+  envoycontrolplane/       config time, never sees a request
+    services.py            Service, ServiceCatalog       what services.yaml declares
+    cluster.py             Cluster, Endpoint             where upstreams live
+    listener.py            Listener, Route               how requests are routed
+    snapshot.py            Snapshot, Bootstrap           everything one Envoy is given
+    server.py              the control plane program
+    syncer.py              copies the snapshot next to Envoy
+  envoydataplane/          request time, sees every request
+    external_processor.py  ExternalProcessor             sets the route header from the body
 ```
 
-One image, three entry points, each run by a different pod:
+Class names follow Envoy's own vocabulary, so the docs and the code use the same
+words. `networkingcommons` holds only what both planes import.
+
+`config/services.yaml` is the only file a human edits. `make xds` regenerates
+`config/coordinator/` from it, and a test fails if the committed files drift.
+
+One image runs three programs:
 
 | program | runs as |
 | --- | --- |
-| `cmd/server.py` | the `controlplane` pod, the image default |
-| `cmd/syncer.py` | a sidecar in the `coordinator` pod |
-| `cmd/extproc.py` | the `extproc` pod |
+| `python -m envoycontrolplane.server` | the `controlplane` pod, the image default |
+| `python -m envoycontrolplane.syncer` | a sidecar in the `coordinator` pod |
+| `python -m envoydataplane.external_processor` | the `extproc` pod |
+
+Setup and tests:
 
 ```
-config/
-  services.yaml          the only file a human edits
-  coordinator/
-    bootstrap.yaml       static: node id, and to read xDS from /etc/envoy/xds
-    lds.yaml             dynamic: the egress listener, with the ext_proc filter
-    cds.yaml             dynamic: the clusters
-  calculator/
-    envoy.yaml           static: ingress on :8080 -> the app on :8081
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+make test
 ```
-
-`make xds` regenerates the three `config/coordinator/` files from
-`services.yaml`. Their `version_info` is a hash of `services.yaml`, so a change
-there is visible to Envoy.
-
-Two of those three sit next to Envoy:
-
-- `src/cmd/syncer.py` polls `/lds` and `/cds` and writes them into the coordinator's
-  `emptyDir`, which is what makes Envoy reload without a restart. A ConfigMap
-  cannot do this: its `..data` symlink swap does not trip Envoy's inotify watch.
-- `src/cmd/extproc.py` is the ext_proc server. It buffers the request body, reads
-  `op`, and sets the `x-op` header with `clear_route_cache`, so the body decides
-  which calculator serves the request. The decision itself is
-  `src/lib/routing.py`, which is plain python with no protobuf, so it can be read
-  and tested without a cluster.
-
-Every file reads top down: the entry point first, then what it calls, down to
-the leaves.
-
-`make test` runs the tests.
